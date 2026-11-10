@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rompecabezas Social y Ambiental</title>
+<style>
+/* Concepto: panel de controles arriba; tablero y bandeja de piezas lado a lado, apilados en pantallas angostas.
+   Look oscuro azul marino heredado del diseño original, pensado como un único mundo visual. */
+:root {
+  --bg: #0b192c;
+  --card: #1e293b;
+  --ink: #ffffff;
+  --ink-soft: #cbd5e1;
+  --muted: #94a3b8;
+  --line: #334155;
+  --well: #020617;
+  --field: #0f172a;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --sky: #38bdf8;
+  --gold: #f59e0b;
+  --dash: #64748b;
+  --font: 'Segoe UI', Tahoma, Geneva, Verdana, system-ui, sans-serif;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 15px;
+  padding-block: 20px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+h1 {
+  margin: 0 0 6px;
+  color: var(--sky);
+  text-align: center;
+  font-size: 1.8rem;
+  line-height: 1.2;
+  text-wrap: balance;
+}
+
+.subtitle {
+  margin: 0 0 20px;
+  color: var(--ink-soft);
+  text-align: center;
+  text-wrap: balance;
+}
+
+.controls {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 15px 25px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 15px;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+  margin-bottom: 20px;
+  max-width: 100%;
+}
+
+.field { display: flex; align-items: center; gap: 8px; min-width: 0; }
+label { font-weight: bold; color: #f8fafc; }
+
+select, button {
+  font: inherit;
+  font-size: 14px;
+  font-weight: bold;
+  color: var(--ink);
+  background: var(--field);
+  border: 1px solid #475569;
+  border-radius: 6px;
+  padding: 8px 14px;
+  cursor: pointer;
+  min-width: 0;
+  max-width: 100%;
+}
+button:hover, select:hover { border-color: var(--sky); }
+button.primary { background: var(--accent); border-color: var(--accent); }
+button.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+button[aria-pressed="true"] { border-color: var(--gold); color: var(--gold); }
+select:focus-visible, button:focus-visible { outline: 2px solid var(--sky); outline-offset: 2px; }
+
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  justify-content: center;
+  font-size: 1.05rem;
+  font-weight: bold;
+  color: var(--gold);
+  background: var(--field);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.game {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 30px;
+  justify-content: center;
+  align-items: flex-start;
+  width: 100%;
+  max-width: 1200px;
+}
+
+.panel {
+  position: relative;
+  background: var(--card);
+  padding: 15px;
+  border-radius: 12px;
+  border: 2px solid var(--line);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+}
+.board-panel { z-index: 1; }
+.tray-panel { z-index: 2; }
+
+.panel-title {
+  font-size: 1.1rem;
+  font-weight: bold;
+  margin-bottom: 10px;
+  color: var(--muted);
+}
+
+.board {
+  position: relative;
+  box-sizing: content-box;
+  background: var(--well);
+  border: 2px dashed var(--dash);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.tray {
+  position: relative;
+  box-sizing: content-box;
+  background: var(--well);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+#guide {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.piece {
+  position: absolute;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grab;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.7));
+}
+.piece canvas { display: block; width: 100%; height: 100%; pointer-events: none; }
+.piece.dragging { cursor: grabbing; filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.8)); }
+.piece.placed { cursor: default; filter: none; pointer-events: none; }
+.piece.placed canvas { animation: snap 0.45s ease-out; }
+
+@keyframes snap {
+  from { filter: brightness(1.9); }
+  to { filter: brightness(1); }
+}
+
+.hint {
+  max-width: 60ch;
+  margin: 18px 0 0;
+  text-align: center;
+  color: var(--muted);
+  text-wrap: pretty;
+}
+
+.result {
+  margin-top: 25px;
+  max-width: 900px;
+  width: 100%;
+  background: var(--field);
+  border: 2px solid var(--accent);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+}
+.result h2 { color: var(--gold); margin: 0 0 10px; font-size: 1.4rem; text-wrap: balance; }
+.result p { line-height: 1.6; color: #e2e8f0; margin: 0 0 12px; }
+.result .result-stats { color: var(--sky); font-weight: bold; font-variant-numeric: tabular-nums; }
+
+.legal {
+  max-width: 900px;
+  width: 100%;
+  margin-top: 28px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.legal h3 { margin: 0 0 8px; font-size: 13px; color: var(--ink-soft); }
+.legal p { margin: 0 0 8px; text-wrap: pretty; }
+
+@media (max-width: 520px) {
+  h1 { font-size: 1.5rem; }
+  .controls { padding: 14px 16px; }
+  .panel { padding: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .piece.placed canvas { animation: none; }
+}
+</style>
+</head>
+<body>
+<h1>Rompecabezas Interactivo</h1>
+<p class="subtitle">Trabajo Integrador - Contabilidad Social y Ambiental</p>
+
+<div class="controls">
+  <div class="field">
+    <label for="image-select">Infografía:</label>
+    <select id="image-select">
+      <option value="stakeholders">Matriz de Stakeholders</option>
+      <option value="ambientales">Datos Ambientales y Ecoeficiencia</option>
+      <option value="economicos">Aspectos Económicos 2025</option>
+    </select>
+  </div>
+
+  <div class="field">
+    <label for="grid-select">Dificultad:</label>
+    <select id="grid-select">
+      <option value="3">Fácil (3x3 - 9 piezas)</option>
+      <option value="4" selected>Medio (4x4 - 16 piezas)</option>
+      <option value="5">Difícil (5x5 - 25 piezas)</option>
+    </select>
+  </div>
+
+  <button id="btn-restart" class="primary" type="button">Reiniciar juego</button>
+  <button id="btn-guide" type="button" aria-pressed="false">Ver guía</button>
+  <button id="btn-sound" type="button" aria-pressed="true">Sonido: sí</button>
+
+  <div class="stats">
+    <span>Tiempo: <span id="timer">00:00</span></span>
+    <span>Movimientos: <span id="moves">0</span></span>
+    <span>Piezas: <span id="placed">0/16</span></span>
+  </div>
+</div>
+
+<div class="game" id="game">
+  <section class="panel board-panel">
+    <div class="panel-title">Tablero de armado</div>
+    <div id="board" class="board"><canvas id="guide"></canvas></div>
+  </section>
+
+  <section class="panel tray-panel">
+    <div class="panel-title">Piezas disponibles</div>
+    <div id="tray" class="tray"></div>
+  </section>
+</div>
+
+<p class="hint">Arrastrá cada pieza hasta su lugar en el tablero. Si la soltás cerca de su posición correcta, encaja sola.</p>
+
+<section id="result" class="result" aria-live="polite" hidden>
+  <h2 id="result-title">¡Felicitaciones! Juego completado</h2>
+  <p id="result-text"></p>
+  <p id="result-stats" class="result-stats"></p>
+  <button id="btn-again" class="primary" type="button">Jugar de nuevo</button>
+</section>
+
+<footer class="legal">
+  <h3>Aviso legal y de uso</h3>
+  <p>Esta es una actividad educativa realizada como trabajo integrador de la materia Contabilidad Social y Ambiental. No es un producto oficial ni tiene relación, patrocinio o aval de BBVA ni de ninguna otra entidad.</p>
+  <p>Las infografías son representaciones simplificadas creadas para este juego a partir de información pública de un Reporte Integrado 2025. No reproducen el diseño original, y las cifras pueden contener errores o estar desactualizadas, por lo que no deben usarse para tomar decisiones financieras ni de otro tipo. Las marcas y nombres mencionados pertenecen a sus respectivos titulares.</p>
+  <p>El juego no recopila datos personales. Solo recuerda en tu dispositivo si activaste o silenciaste el sonido.</p>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  // Dimensiones lógicas de la infografía; se dibuja al doble para que se vea nítida.
+  // 600x480 y 1200x960 se dividen exactamente en 3, 4 y 5 filas y columnas.
+  var DW = 600, DH = 480, SCALE = 2;
+  var FONT = '"Segoe UI", Tahoma, Arial, sans-serif';
+
+  var DATA = {
+    stakeholders: {
+      title: 'Matriz de Stakeholders',
+      sub: 'Potencial de amenaza y de cooperación',
+      text: 'La matriz clasifica los grupos de interés según su potencial de amenaza y cooperación en 4 cuadrantes: Colaborar (Accionistas y Proveedores), Implicar (Empleados y Clientes), Defender (Reguladores CNV y BCRA) y Controlar (Comunidad y Organizaciones de la Sociedad Civil).',
+      c1: '#1e3a8a', c2: '#0284c7'
+    },
+    ambientales: {
+      title: 'Aspectos e Indicadores Ambientales',
+      sub: 'Ecoeficiencia y financiamiento verde',
+      text: 'Resalta la canalización de $3,2 billones en financiamiento verde, certificación ISO 14001 y 50001, estrategia de descarbonización, ecoeficiencia energética y metas de emisión limpia para el 2029.',
+      c1: '#14532d', c2: '#16a34a',
+      rows: ['Descarbonización', 'ISO 14001 / 50001', 'Energía 100% Renovable', 'Inversión Verde $3,2 Billones'],
+      numbered: true,
+      rowBg: 'rgba(15,23,42,0.78)', badge: '#4ade80', ink: '#bbf7d0', numInk: '#052e16'
+    },
+    economicos: {
+      title: 'Principales Aspectos Económicos 2025',
+      sub: 'Resultados y contexto macroeconómico',
+      text: 'Destaca una ganancia neta de AR$ 267.420 millones, rentabilidad ROE de 7,3%, crecimiento de cartera de créditos en 47,6% y superávit fiscal primario de 1,4% en el contexto macroeconómico.',
+      c1: '#581c87', c2: '#9333ea',
+      rows: ['Ganancia: AR$ 267.420 Millones', 'ROE: 7,3% (Superior al mercado)', 'Créditos: +47,6% Cuota Mercado', 'Mora Controlada: 4,18%'],
+      numbered: false,
+      rowBg: 'rgba(30,27,75,0.8)', badge: '#e9d5ff', ink: '#f3e8ff', numInk: '#1e1b4b'
+    }
+  };
+
+  var $ = function (id) { return document.getElementById(id); };
+  var game = $('game'), board = $('board'), tray = $('tray'), guide = $('guide');
+  var imgSel = $('image-select'), gridSel = $('grid-select');
+  var btnRestart = $('btn-restart'), btnGuide = $('btn-guide'), btnAgain = $('btn-again');
+  var timerEl = $('timer'), movesEl = $('moves'), placedEl = $('placed');
+  var result = $('result'), resTitle = $('result-title'), resText = $('result-text'), resStats = $('result-stats');
+
+  var grid = 4, key = 'stakeholders', size = null, source = null;
+  var pieces = [], moves = 0, placedCount = 0, seconds = 0;
+  var timerId = null, started = false, active = false, guideOn = false;
+  var drag = null, zTop = 10;
+
+  /* ---------- Dibujo de la infografía ---------- */
+
+  function fit(ctx, text, maxW, size, weight) {
+    var s = size, w = weight || 'bold';
+    do {
+      ctx.font = w + ' ' + s + 'px ' + FONT;
+      if (ctx.measureText(text).width <= maxW) break;
+      s--;
+    } while (s > 9);
+  }
+
+  function rrect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function drawMatrix(x) {
+    var quads = [
+      { t: 'COLABORAR', l: ['Accionistas', 'Proveedores'] },
+      { t: 'IMPLICAR', l: ['Empleados', 'Clientes'] },
+      { t: 'DEFENDER', l: ['Reguladores', '(CNV y BCRA)'] },
+      { t: 'CONTROLAR', l: ['Comunidad', 'Organizaciones de la', 'Sociedad Civil'] }
+    ];
+    var gx = 36, gy = 98, gap = 14;
+    var qw = (DW - 72 - gap) / 2, qh = (330 - gap) / 2;
+    quads.forEach(function (q, i) {
+      var cx = gx + (i % 2) * (qw + gap);
+      var cy = gy + Math.floor(i / 2) * (qh + gap);
+      rrect(x, cx, cy, qw, qh, 14);
+      x.fillStyle = 'rgba(2,6,23,0.5)';
+      x.fill();
+      x.strokeStyle = 'rgba(255,255,255,0.5)';
+      x.lineWidth = 2;
+      x.stroke();
+
+      x.textAlign = 'center';
+      x.fillStyle = '#fef08a';
+      fit(x, q.t, qw - 30, 21);
+      x.fillText(q.t, cx + qw / 2, cy + 38);
+
+      x.strokeStyle = 'rgba(254,240,138,0.6)';
+      x.lineWidth = 1.5;
+      x.beginPath();
+      x.moveTo(cx + qw / 2 - 32, cy + 50);
+      x.lineTo(cx + qw / 2 + 32, cy + 50);
+      x.stroke();
+
+      x.fillStyle = '#ffffff';
+      q.l.forEach(function (ln, j) {
+        fit(x, ln, qw - 30, 17, 'normal');
+        x.fillText(ln, cx + qw / 2, cy + 80 + j * 26);
+      });
+    });
+  }
+
+  function drawRows(x, d) {
+    d.rows.forEach(function (t, i) {
+      var y = 102 + i * 84, h = 68, rx = 44, rw = DW - 88;
+      rrect(x, rx, y, rw, h, 14);
+      x.fillStyle = d.rowBg;
+      x.fill();
+      x.strokeStyle = 'rgba(255,255,255,0.35)';
+      x.lineWidth = 1.5;
+      x.stroke();
+
+      x.beginPath();
+      x.arc(rx + 38, y + h / 2, d.numbered ? 20 : 10, 0, Math.PI * 2);
+      x.fillStyle = d.badge;
+      x.fill();
+      if (d.numbered) {
+        x.textAlign = 'center';
+        x.fillStyle = d.numInk;
+        x.font = 'bold 20px ' + FONT;
+        x.fillText(String(i + 1), rx + 38, y + h / 2 + 7);
+      }
+
+      x.textAlign = 'left';
+      x.fillStyle = d.ink;
+      fit(x, t, rw - 70 - 18, 20);
+      x.fillText(t, rx + 70, y + h / 2 + 7);
+    });
+    x.textAlign = 'center';
+  }
+
+  function buildSource(k) {
+    var d = DATA[k];
+    var cv = document.createElement('canvas');
+    cv.width = DW * SCALE;
+    cv.height = DH * SCALE;
+    var x = cv.getContext('2d');
+    x.scale(SCALE, SCALE);
+
+    var g = x.createLinearGradient(0, 0, DW, DH);
+    g.addColorStop(0, d.c1);
+    g.addColorStop(1, d.c2);
+    x.fillStyle = g;
+    x.fillRect(0, 0, DW, DH);
+
+    // Círculos translúcidos: dan referencias visuales a las piezas con poco texto.
+    x.fillStyle = 'rgba(255,255,255,0.07)';
+    [[90, 100, 110], [545, 150, 80], [480, 410, 130], [70, 400, 70], [300, 260, 45]].forEach(function (c) {
+      x.beginPath();
+      x.arc(c[0], c[1], c[2], 0, Math.PI * 2);
+      x.fill();
+    });
+
+    x.strokeStyle = '#ffffff';
+    x.lineWidth = 3;
+    x.strokeRect(14, 14, DW - 28, DH - 28);
+
+    x.textAlign = 'center';
+    x.fillStyle = '#ffffff';
+    var title = d.title.toUpperCase();
+    fit(x, title, DW - 90, 26);
+    x.fillText(title, DW / 2, 56);
+
+    x.fillStyle = 'rgba(255,255,255,0.85)';
+    fit(x, d.sub, DW - 90, 15, 'normal');
+    x.fillText(d.sub, DW / 2, 80);
+
+    if (k === 'stakeholders') drawMatrix(x); else drawRows(x, d);
+
+    x.fillStyle = 'rgba(255,255,255,0.7)';
+    x.font = '12px ' + FONT;
+    x.textAlign = 'center';
+    x.fillText('Reporte Integrado 2025', DW / 2, DH - 28);
+    return cv;
+  }
+
+  /* ---------- Medidas y guía ---------- */
+
+  function computeSize() {
+    var avail = Math.max(240, Math.min(480, game.clientWidth - 40));
+    var bw = Math.floor(avail / grid) * grid;
+    var bh = Math.floor((avail * 0.8) / grid) * grid;
+    return { bw: bw, bh: bh, pw: bw / grid, ph: bh / grid };
+  }
+
+  function applySize() {
+    [board, tray].forEach(function (el) {
+      el.style.width = size.bw + 'px';
+      el.style.height = size.bh + 'px';
+    });
+  }
+
+  function drawGuide() {
+    var w = size.bw * 2, h = size.bh * 2;
+    guide.width = w;
+    guide.height = h;
+    var g = guide.getContext('2d');
+    if (guideOn && source) {
+      g.globalAlpha = 0.3;
+      g.drawImage(source, 0, 0, w, h);
+      g.globalAlpha = 1;
+    }
+    g.strokeStyle = 'rgba(148,163,184,0.28)';
+    g.lineWidth = 2;
+    g.beginPath();
+    for (var i = 1; i < grid; i++) {
+      g.moveTo((i * w) / grid, 0); g.lineTo((i * w) / grid, h);
+      g.moveTo(0, (i * h) / grid); g.lineTo(w, (i * h) / grid);
+    }
+    g.stroke();
+  }
+
+  /* ---------- Sonido (Web Audio, sin archivos externos) ---------- */
+
+  var soundOn = true, actx = null;
+  try { soundOn = localStorage.getItem('rompecabezas-sonido') !== 'off'; } catch (_) {}
+
+  function audio() {
+    if (!soundOn) return null;
+    try {
+      if (!actx) {
+        var C = window.AudioContext || window.webkitAudioContext;
+        if (!C) return null;
+        actx = new C();
+      }
+      if (actx.state === 'suspended') actx.resume();
+      return actx;
+    } catch (_) { return null; }
+  }
+
+  function tone(freq, start, dur, type, vol) {
+    var a = audio();
+    if (!a) return;
+    var t = a.currentTime + start;
+    var o = a.createOscillator(), g = a.createGain();
+    o.type = type || 'sine';
+    o.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol || 0.15, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g);
+    g.connect(a.destination);
+    o.start(t);
+    o.stop(t + dur + 0.05);
+  }
+
+  var sfx = {
+    pick: function () { tone(520, 0, 0.06, 'triangle', 0.06); },
+    snap: function () { tone(660, 0, 0.1, 'sine', 0.14); tone(990, 0.07, 0.14, 'sine', 0.12); },
+    miss: function () { tone(210, 0, 0.16, 'triangle', 0.09); },
+    win: function () {
+      // Arpegio ascendente y acorde final de do mayor.
+      [523.25, 659.25, 783.99, 1046.5].forEach(function (f, i) {
+        tone(f, 0.25 + i * 0.13, 0.28, 'triangle', 0.16);
+      });
+      [1046.5, 1318.5, 1568].forEach(function (f) {
+        tone(f, 0.85, 0.9, 'sine', 0.12);
+      });
+    }
+  };
+
+  /* ---------- Estado y tiempo ---------- */
+
+  function fmt(s) {
+    return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+  }
+
+  function stopTimer() {
+    if (timerId) { clearInterval(timerId); timerId = null; }
+  }
+
+  function startTimer() {
+    stopTimer();
+    timerId = setInterval(function () {
+      seconds++;
+      timerEl.textContent = fmt(seconds);
+    }, 1000);
+  }
+
+  function updateStats() {
+    movesEl.textContent = moves;
+    placedEl.textContent = placedCount + '/' + pieces.length;
+  }
+
+  /* ---------- Piezas ---------- */
+
+  function shuffle(a) {
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+  function buildPieces() {
+    pieces.forEach(function (p) { p.el.remove(); });
+    pieces = [];
+
+    var sw = source.width / grid, sh = source.height / grid;
+    var slots = shuffle(Array.from({ length: grid * grid }, function (_, i) { return i; }));
+
+    for (var r = 0; r < grid; r++) {
+      for (var c = 0; c < grid; c++) {
+        var pc = document.createElement('canvas');
+        pc.width = sw;
+        pc.height = sh;
+        var px = pc.getContext('2d');
+        px.drawImage(source, c * sw, r * sh, sw, sh, 0, 0, sw, sh);
+        px.strokeStyle = 'rgba(2,6,23,0.7)';
+        px.lineWidth = 6;
+        px.strokeRect(0, 0, sw, sh);
+        px.strokeStyle = 'rgba(255,255,255,0.3)';
+        px.lineWidth = 2;
+        px.strokeRect(6, 6, sw - 12, sh - 12);
+
+        var el = document.createElement('div');
+        el.className = 'piece';
+        el.dataset.r = r;
+        el.dataset.c = c;
+        el.style.width = size.pw + 'px';
+        el.style.height = size.ph + 'px';
+        el.appendChild(pc);
+
+        var slot = slots[r * grid + c];
+        var jx = (Math.random() - 0.5) * 0.5 * size.pw;
+        var jy = (Math.random() - 0.5) * 0.5 * size.ph;
+        el.style.left = clamp((slot % grid) * size.pw + jx, 0, size.bw - size.pw) + 'px';
+        el.style.top = clamp(Math.floor(slot / grid) * size.ph + jy, 0, size.bh - size.ph) + 'px';
+
+        var p = { el: el, r: r, c: c, placed: false };
+        attachDrag(p);
+        tray.appendChild(el);
+        pieces.push(p);
+      }
+    }
+  }
+
+  /* ---------- Arrastre ---------- */
+
+  function attachDrag(p) {
+    var el = p.el;
+    el.addEventListener('pointerdown', function (e) { onDown(e, p); });
+    el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerup', onUp);
+    el.addEventListener('pointercancel', onUp);
+  }
+
+  function onDown(e, p) {
+    if (!active || p.placed || drag) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    e.preventDefault();
+    var el = p.el, r = el.getBoundingClientRect();
+    drag = { p: p, id: e.pointerId, dx: e.clientX - r.left, dy: e.clientY - r.top };
+    try { el.setPointerCapture(e.pointerId); } catch (_) {}
+    if (!started) { started = true; startTimer(); }
+    sfx.pick();
+    el.classList.add('dragging');
+    el.style.position = 'fixed';
+    el.style.left = r.left + 'px';
+    el.style.top = r.top + 'px';
+    el.style.zIndex = ++zTop;
+  }
+
+  // Al arrastrar cerca del borde superior o inferior, la página se desplaza sola
+  // (en el celular la bandeja queda debajo del tablero y el arrastre bloquea el scroll).
+  var lastY = 0, scrollRaf = 0;
+  function autoScroll() {
+    scrollRaf = 0;
+    if (!drag) return;
+    var edge = 70, vh = window.innerHeight, dy = 0;
+    if (lastY < edge) dy = -Math.ceil((edge - lastY) / 6);
+    else if (lastY > vh - edge) dy = Math.ceil((lastY - (vh - edge)) / 6);
+    if (dy) {
+      window.scrollBy(0, dy);
+      scrollRaf = requestAnimationFrame(autoScroll);
+    }
+  }
+  function kickScroll(y) {
+    lastY = y;
+    if (!scrollRaf) scrollRaf = requestAnimationFrame(autoScroll);
+  }
+
+  function onMove(e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    var el = drag.p.el;
+    el.style.left = (e.clientX - drag.dx) + 'px';
+    el.style.top = (e.clientY - drag.dy) + 'px';
+    kickScroll(e.clientY);
+  }
+
+  function onUp(e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    var p = drag.p;
+    drag = null;
+    if (scrollRaf) { cancelAnimationFrame(scrollRaf); scrollRaf = 0; }
+    try { p.el.releasePointerCapture(e.pointerId); } catch (_) {}
+    p.el.classList.remove('dragging');
+    moves++;
+    drop(p);
+    updateStats();
+    if (p.placed) sfx.snap(); else sfx.miss();
+    if (placedCount === pieces.length) win();
+  }
+
+  function drop(p) {
+    var el = p.el, r = el.getBoundingClientRect();
+    var b = board.getBoundingClientRect();
+    var ox = b.left + board.clientLeft, oy = b.top + board.clientTop;
+    var tx = p.c * size.pw, ty = p.r * size.ph;
+    var dist = Math.hypot(r.left - ox - tx, r.top - oy - ty);
+    var tol = Math.min(size.pw, size.ph) * 0.45;
+
+    el.style.position = 'absolute';
+    if (dist <= tol) {
+      board.appendChild(el);
+      el.style.left = tx + 'px';
+      el.style.top = ty + 'px';
+      el.style.zIndex = '';
+      el.classList.add('placed');
+      p.placed = true;
+      placedCount++;
+      return;
+    }
+
+    // No encajó: la pieza queda donde se soltó, dentro del área de juego.
+    var wr = game.getBoundingClientRect();
+    var L = clamp(r.left, wr.left, Math.max(wr.left, wr.right - r.width));
+    var T = clamp(r.top, wr.top, Math.max(wr.top, wr.bottom - r.height));
+    var t = tray.getBoundingClientRect();
+    tray.appendChild(el);
+    el.style.left = (L - (t.left + tray.clientLeft)) + 'px';
+    el.style.top = (T - (t.top + tray.clientTop)) + 'px';
+  }
+
+  function win() {
+    active = false;
+    stopTimer();
+    var d = DATA[key];
+    resTitle.textContent = '¡Completado! - ' + d.title;
+    resText.textContent = d.text;
+    resStats.textContent = 'Tiempo: ' + fmt(seconds) + ' · Movimientos: ' + moves;
+    result.hidden = false;
+    sfx.win();
+    var calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    result.scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'nearest' });
+  }
+
+  /* ---------- Juego ---------- */
+
+  function initGame() {
+    grid = parseInt(gridSel.value, 10);
+    key = imgSel.value;
+    drag = null;
+    stopTimer();
+    seconds = 0; moves = 0; placedCount = 0; started = false; active = true;
+    timerEl.textContent = '00:00';
+    result.hidden = true;
+
+    size = computeSize();
+    applySize();
+    source = buildSource(key);
+    drawGuide();
+    buildPieces();
+    updateStats();
+  }
+
+  var resizeQueued = false;
+  function relayout() {
+    resizeQueued = false;
+    if (!size || drag) return;
+    var next = computeSize();
+    if (next.bw === size.bw && next.bh === size.bh) return;
+    var rx = next.pw / size.pw, ry = next.ph / size.ph;
+    size = next;
+    applySize();
+    pieces.forEach(function (p) {
+      p.el.style.width = size.pw + 'px';
+      p.el.style.height = size.ph + 'px';
+      if (p.placed) {
+        p.el.style.left = (p.c * size.pw) + 'px';
+        p.el.style.top = (p.r * size.ph) + 'px';
+      } else {
+        p.el.style.left = (parseFloat(p.el.style.left) * rx) + 'px';
+        p.el.style.top = (parseFloat(p.el.style.top) * ry) + 'px';
+      }
+    });
+    drawGuide();
+  }
+
+  window.addEventListener('resize', function () {
+    if (resizeQueued) return;
+    resizeQueued = true;
+    requestAnimationFrame(relayout);
+  });
+
+  btnRestart.addEventListener('click', initGame);
+  btnAgain.addEventListener('click', initGame);
+  imgSel.addEventListener('change', initGame);
+  gridSel.addEventListener('change', initGame);
+  btnGuide.addEventListener('click', function () {
+    guideOn = !guideOn;
+    btnGuide.setAttribute('aria-pressed', String(guideOn));
+    btnGuide.textContent = guideOn ? 'Ocultar guía' : 'Ver guía';
+    drawGuide();
+  });
+
+  var btnSound = $('btn-sound');
+  function paintSound() {
+    btnSound.setAttribute('aria-pressed', String(soundOn));
+    btnSound.textContent = soundOn ? 'Sonido: sí' : 'Sonido: no';
+  }
+  btnSound.addEventListener('click', function () {
+    soundOn = !soundOn;
+    try { localStorage.setItem('rompecabezas-sonido', soundOn ? 'on' : 'off'); } catch (_) {}
+    paintSound();
+    if (soundOn) sfx.snap();
+  });
+  paintSound();
+
+  initGame();
+})();
+</script>
+</body>
+</html>
